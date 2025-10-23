@@ -1,0 +1,6 @@
+@ServiceBus_MMO_PostOffice_HostAddress = http://localhost:5187
+
+GET {{ServiceBus_MMO_PostOffice_HostAddress}}/weatherforecast/
+Accept: application/json
+
+###

@@ -1,103 +1,99 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using AutoMapper;
+using AutoMapper.QueryableExtensions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ServiceBus_MMO_PostOffice.Data;
+using ServiceBus_MMO_PostOffice.DTO_s;
 using ServiceBus_MMO_PostOffice.Models;
 
 namespace ServiceBus_MMO_PostOffice.Controllers
 {
-
-    //CLASS CRUD AUTO GENERATED IN VISUAL STUDIO
-    //CRUDS ARE NOT THE FOCUS OF THIS PROJECT!!!
-    //I WILL LEAVE IT AS IS WITHOUT ANY MODIFICATIONS
-    //THIS SUITS THE PURPOSE OF THE PROJECT JUST FINE
-
     [Route("api/[controller]")]
     [ApiController]
-    public class GuildsController : ControllerBase
+    public class GuildsController(ApplicationDbContext db, IMapper _mapper) : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-
-        public GuildsController(ApplicationDbContext context)
-        {
-            _context = context;
-        }
+        private readonly AutoMapper.IConfigurationProvider _mapConfig = _mapper.ConfigurationProvider;
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Guild>>> GetGuild()
+        public async Task<ActionResult> GetLatestGuilds([FromQuery] int page = 1, CancellationToken ct = default)
         {
-            return await _context.Guild.ToListAsync();
+            int GuildsPerPage = 30;
+            int skip = (page - 1) * GuildsPerPage;
+
+            GuildDTO[] guilds = await db.Guild
+                .AsNoTracking()
+                .OrderByDescending(x => x.Id)
+                .Skip(skip)
+                .Take(GuildsPerPage)
+                .ProjectTo<GuildDTO>(_mapConfig)
+                .ToArrayAsync(ct);
+
+            return Ok(guilds);
         }
 
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Guild>> GetGuild(int id)
+        [HttpGet("{id:int}")]
+        public async Task<ActionResult> GetGuild([FromRoute] int id, CancellationToken ct = default)
         {
-            var guild = await _context.Guild.FindAsync(id);
+            GuildDTO guild = await db.Guild
+                .AsNoTracking()
+                .ProjectTo<GuildDTO>(_mapConfig)
+                .FirstOrDefaultAsync(x => x.Id == id, ct);
 
-            if (guild == null)
-            {
-                return NotFound();
-            }
-
-            return guild;
-        }
-
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutGuild(int id, Guild guild)
-        {
-            if (id != guild.Id)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(guild).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!GuildExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
+            return guild is null ? NotFound() : Ok(guild);
         }
 
         [HttpPost]
-        public async Task<ActionResult<Guild>> PostGuild(Guild guild)
+        public async Task<ActionResult<Guild>> PostGuild([FromBody] CreateGuildDTO createGuildDTO, CancellationToken ct = default)
         {
-            _context.Guild.Add(guild);
-            await _context.SaveChangesAsync();
+            Guild guild = _mapper.Map<Guild>(createGuildDTO);
+
+            await db.Guild.AddAsync(guild);
+            await db.SaveChangesAsync(ct);
 
             return CreatedAtAction("GetGuild", new { id = guild.Id }, guild);
         }
 
-        // DELETE: api/Guilds/5
-        [HttpDelete("{id}")]
-        public async Task<IActionResult> DeleteGuild(int id)
+        [HttpDelete("delete_guild_{id:int}")]
+        public async Task<IActionResult> DeleteGuild([FromRoute] int id, CancellationToken ct = default)
         {
-            var guild = await _context.Guild.FindAsync(id);
-            if (guild == null)
-            {
-                return NotFound();
-            }
+            Guild? guild = await db.Guild.FindAsync(id);
+            if (guild == null) return NotFound();
 
-            _context.Guild.Remove(guild);
-            await _context.SaveChangesAsync();
+            await db.Player
+                .Where(p => p.GuildId == id)
+                .ForEachAsync(p => p.GuildId = null, ct);
+
+            db.Guild.Remove(guild);
+            await db.SaveChangesAsync(ct);
 
             return NoContent();
         }
 
-        private bool GuildExists(int id)
+        [HttpPost("add_player_to_guild")]
+        public async Task<IActionResult> AddPlayerToGuild([FromBody] GuildRelationDTO relationDTO, CancellationToken ct = default)
         {
-            return _context.Guild.Any(e => e.Id == id);
+            bool guildExists = await db.Guild.AsNoTracking().AnyAsync(g => g.Id == relationDTO.GuildId, ct);
+            if (!guildExists) return NotFound($"Guild {relationDTO.GuildId} not found.");
+
+            Player? player = await db.Player.FirstOrDefaultAsync(p => p.Id == relationDTO.PlayerId, ct);
+            if (player is null) return NotFound($"Player {relationDTO.PlayerId} not found.");
+
+            player.GuildId = relationDTO.GuildId;
+            await db.SaveChangesAsync(ct);
+
+            return Ok();
+        }
+
+        [HttpDelete("remove_player_{playerId:int}")]
+        public async Task<IActionResult> RemovePlayerFromGuild([FromRoute] int playerId, CancellationToken ct = default)
+        {
+            Player? player = await db.Player.FirstOrDefaultAsync(p => p.Id == playerId, ct);
+            if (player is null) return NotFound($"Player {playerId} not found.");
+
+            player.GuildId = null;
+            await db.SaveChangesAsync(ct);
+
+            return NoContent();
         }
     }
 }

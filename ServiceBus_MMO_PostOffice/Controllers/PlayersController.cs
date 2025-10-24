@@ -1,102 +1,70 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using AutoMapper;
+using AutoMapper.QueryableExtensions;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ServiceBus_MMO_PostOffice.Data;
+using ServiceBus_MMO_PostOffice.DTO_s;
 using ServiceBus_MMO_PostOffice.Models;
 
 namespace ServiceBus_MMO_PostOffice.Controllers
 {
 
-    //CLASS CRUD AUTO GENERATED IN VISUAL STUDIO
-    //CRUDS ARE NOT THE FOCUS OF THIS PROJECT!!!
-    //I WILL LEAVE IT AS IS WITHOUT ANY MODIFICATIONS
-    //THIS SUITS THE PURPOSE OF THE PROJECT JUST FINE
-
     [Route("api/[controller]")]
     [ApiController]
-    public class PlayersController : ControllerBase
+    public class PlayersController(ApplicationDbContext db, IMapper _mapper) : ControllerBase
     {
-        private readonly ApplicationDbContext _context;
-
-        public PlayersController(ApplicationDbContext context)
-        {
-            _context = context;
-        }
+        private readonly AutoMapper.IConfigurationProvider _mapConfig = _mapper.ConfigurationProvider;
 
         [HttpGet]
-        public async Task<ActionResult<IEnumerable<Player>>> GetPlayer()
+        public async Task<ActionResult> GetLatestPlayers([FromQuery] int page = 1, CancellationToken ct = default)
         {
-            return await _context.Player.ToListAsync();
+            int PlayersPerPage = 30;
+            int skip = (page - 1) * PlayersPerPage;
+
+            PlayerDTO[] players = await db.Player
+                .AsNoTracking()
+                .OrderByDescending(x => x.Id)
+                .Skip(skip)
+                .Take(PlayersPerPage)
+                .ProjectTo<PlayerDTO>(_mapConfig)
+                .ToArrayAsync(ct);
+
+            return Ok(players);
         }
 
-        [HttpGet("{id}")]
-        public async Task<ActionResult<Player>> GetPlayer(int id)
+        [HttpGet("{id:int}")]
+        public async Task<ActionResult> GetPlayer([FromRoute] int id, CancellationToken ct = default)
         {
-            var player = await _context.Player.FindAsync(id);
+            PlayerDTO player = await db.Player
+                .AsNoTracking()
+                .ProjectTo<PlayerDTO>(_mapConfig)
+                .FirstOrDefaultAsync(x => x.Id == id, ct);
 
-            if (player == null)
-            {
-                return NotFound();
-            }
-
-            return player;
-        }
-
-        [HttpPut("{id}")]
-        public async Task<IActionResult> PutPlayer(int id, Player player)
-        {
-            if (id != player.Id)
-            {
-                return BadRequest();
-            }
-
-            _context.Entry(player).State = EntityState.Modified;
-
-            try
-            {
-                await _context.SaveChangesAsync();
-            }
-            catch (DbUpdateConcurrencyException)
-            {
-                if (!PlayerExists(id))
-                {
-                    return NotFound();
-                }
-                else
-                {
-                    throw;
-                }
-            }
-
-            return NoContent();
+            return player is null ? NotFound() : Ok(player);
         }
 
         [HttpPost]
-        public async Task<ActionResult<Player>> PostPlayer(Player player)
+        public async Task<ActionResult<Player>> PostPlayer([FromBody] CreatePlayerDTO createPlayerDTO, CancellationToken ct = default)
         {
-            _context.Player.Add(player);
-            await _context.SaveChangesAsync();
+            Player player = _mapper.Map<Player>(createPlayerDTO);
+
+            await db.Player.AddAsync(player);
+            await db.SaveChangesAsync(ct);
 
             return CreatedAtAction("GetPlayer", new { id = player.Id }, player);
         }
 
         [HttpDelete("{id}")]
-        public async Task<IActionResult> DeletePlayer(int id)
+        public async Task<IActionResult> DeletePlayer([FromRoute] int id, CancellationToken ct = default)
         {
-            var player = await _context.Player.FindAsync(id);
-            if (player == null)
-            {
-                return NotFound();
-            }
+            Player player = await db.Player.FindAsync(id);
+            if (player == null) return NotFound();
 
-            _context.Player.Remove(player);
-            await _context.SaveChangesAsync();
+            db.Player.Remove(player);
+            await db.SaveChangesAsync(ct);
 
             return NoContent();
         }
 
-        private bool PlayerExists(int id)
-        {
-            return _context.Player.Any(e => e.Id == id);
-        }
     }
 }

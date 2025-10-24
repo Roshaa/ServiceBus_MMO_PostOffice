@@ -1,13 +1,14 @@
 ﻿using AutoMapper;
 using AutoMapper.QueryableExtensions;
+using Azure.Messaging.ServiceBus;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ServiceBus_MMO_PostOffice.Data;
 using ServiceBus_MMO_PostOffice.DTO_s;
-using ServiceBus_MMO_PostOffice.Messages;
 using ServiceBus_MMO_PostOffice.Messages.MessageTypes;
 using ServiceBus_MMO_PostOffice.Models;
 using ServiceBus_MMO_PostOffice.Services;
+using SharedClasses.Contracts;
 
 namespace ServiceBus_MMO_PostOffice.Controllers
 {
@@ -56,12 +57,8 @@ namespace ServiceBus_MMO_PostOffice.Controllers
 
             PlayerCreated playerCreated = _mapper.Map<PlayerCreated>(player);
 
-            GenericMessage<PlayerCreated> message = new GenericMessage<PlayerCreated>();
-            message.Payload = playerCreated;
-            message.Subject = "PlayerCreated";
-            message.PlayerId = player.Id.ToString();
+            ServiceBusMessage sbMessage = _publisher.CreateMessage(playerCreated, PlayerCreatedSubscription.Subject);
 
-            var sbMessage = await _publisher.CreateMessageAsync(message);
             await _publisher.PublishMessageAsync(sbMessage);
 
             return CreatedAtAction("GetPlayer", new { id = player.Id }, player);

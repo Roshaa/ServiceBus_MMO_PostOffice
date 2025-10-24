@@ -1,3 +1,5 @@
 <Solution>
+  <Project Path="ClientConsoleApp/ClientConsoleApp.csproj" Id="ca68e800-81c2-43d0-851f-1d5d5196c624" />
   <Project Path="ServiceBus_MMO_PostOffice/ServiceBus_MMO_PostOffice.csproj" />
+  <Project Path="SharedClasses/SharedClasses.csproj" Id="bdb32fbb-f993-42fa-878f-cb4d350ee9e0" />
 </Solution>

@@ -1,5 +1,5 @@
 ﻿using Azure.Messaging.ServiceBus;
-using ServiceBus_MMO_PostOffice.Messages;
+using ServiceBus_MMO_PostOffice.Messages.MessageTypes;
 using System.Diagnostics;
 
 namespace ServiceBus_MMO_PostOffice.Services
@@ -8,6 +8,8 @@ namespace ServiceBus_MMO_PostOffice.Services
     {
         private readonly ServiceBusSender _sender;
         private readonly ILogger<PostOfficeServiceBusPublisher> _log;
+        private const string JsonContentType = "application/json";
+
 
         public PostOfficeServiceBusPublisher(ServiceBusSender sender, ILogger<PostOfficeServiceBusPublisher> log)
         {
@@ -15,19 +17,21 @@ namespace ServiceBus_MMO_PostOffice.Services
             _log = log;
         }
 
-        public async Task<ServiceBusMessage> CreateMessageAsync<T>(GenericMessage<T> m)
+        public ServiceBusMessage CreateMessage<T>(T payload, string subject, string sessionId = null)
         {
-            ServiceBusMessage msg = new ServiceBusMessage(BinaryData.FromObjectAsJson(m.Payload))
+            var msg = new ServiceBusMessage(BinaryData.FromObjectAsJson(payload))
             {
-                ContentType = "application/json",
-                Subject = m.Subject,
-                CorrelationId = Activity.Current?.TraceId.ToString()
+                ContentType = JsonContentType,
+                Subject = subject,
+                CorrelationId = Activity.Current?.TraceId.ToString(),
+                MessageId = $"{subject}:{Guid.NewGuid():N}"
             };
 
-            if (m.TimeToLive.HasValue) msg.TimeToLive = m.TimeToLive.Value;
+            var playerId = payload switch { PlayerCreated p => p.Id, _ => 0 };
+            if (playerId > 0) msg.ApplicationProperties["playerId"] = playerId;
 
-            if (!string.IsNullOrWhiteSpace(m.PlayerId)) msg.ApplicationProperties["PlayerId"] = m.PlayerId;
-            if (!string.IsNullOrWhiteSpace(m.GuildId)) msg.ApplicationProperties["GuildId"] = m.GuildId;
+            //var guildId = payload switch { GuildCreated g => g.Id, _ => 0 };
+            //if (guildId > 0) msg.ApplicationProperties["guildId"] = guildId;
 
             return msg;
         }

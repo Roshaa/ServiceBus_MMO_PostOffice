@@ -4,14 +4,17 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using ServiceBus_MMO_PostOffice.Data;
 using ServiceBus_MMO_PostOffice.DTO_s;
+using ServiceBus_MMO_PostOffice.Messages;
+using ServiceBus_MMO_PostOffice.Messages.MessageTypes;
 using ServiceBus_MMO_PostOffice.Models;
+using ServiceBus_MMO_PostOffice.Services;
 
 namespace ServiceBus_MMO_PostOffice.Controllers
 {
 
     [Route("api/[controller]")]
     [ApiController]
-    public class PlayersController(ApplicationDbContext db, IMapper _mapper) : ControllerBase
+    public class PlayersController(ApplicationDbContext db, IMapper _mapper, PostOfficeServiceBusPublisher _publisher) : ControllerBase
     {
         private readonly AutoMapper.IConfigurationProvider _mapConfig = _mapper.ConfigurationProvider;
 
@@ -50,6 +53,16 @@ namespace ServiceBus_MMO_PostOffice.Controllers
 
             await db.Player.AddAsync(player);
             await db.SaveChangesAsync(ct);
+
+            PlayerCreated playerCreated = _mapper.Map<PlayerCreated>(player);
+
+            GenericMessage<PlayerCreated> message = new GenericMessage<PlayerCreated>();
+            message.Payload = playerCreated;
+            message.Subject = "PlayerCreated";
+            message.PlayerId = player.Id.ToString();
+
+            var sbMessage = await _publisher.CreateMessageAsync(message);
+            await _publisher.PublishMessageAsync(sbMessage);
 
             return CreatedAtAction("GetPlayer", new { id = player.Id }, player);
         }

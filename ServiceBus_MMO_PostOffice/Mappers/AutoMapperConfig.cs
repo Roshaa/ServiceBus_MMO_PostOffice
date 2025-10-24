@@ -1,5 +1,6 @@
 ﻿using AutoMapper;
 using ServiceBus_MMO_PostOffice.DTO_s;
+using ServiceBus_MMO_PostOffice.Messages.MessageTypes;
 using ServiceBus_MMO_PostOffice.Models;
 
 namespace ServiceBus_MMO_PostOffice.Mappers
@@ -17,6 +18,7 @@ namespace ServiceBus_MMO_PostOffice.Mappers
             CreateMap<Guild, GuildDTO>();
             CreateMap<GuildDTO, Guild>();
             CreateMap<CreateGuildDTO, Guild>();
+            CreateMap<Player, PlayerCreated>();
         }
     }
 }

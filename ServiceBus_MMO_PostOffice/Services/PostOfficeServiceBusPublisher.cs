@@ -1,4 +1,6 @@
 ﻿using Azure.Messaging.ServiceBus;
+using ServiceBus_MMO_PostOffice.Messages;
+using System.Diagnostics;
 
 namespace ServiceBus_MMO_PostOffice.Services
 {
@@ -13,20 +15,26 @@ namespace ServiceBus_MMO_PostOffice.Services
             _log = log;
         }
 
-        public async Task PublishAsync<T>(T payload, string? subject = null, string? correlationId = null, TimeSpan? ttl = null, CancellationToken ct = default)
+        public async Task<ServiceBusMessage> CreateMessageAsync<T>(GenericMessage<T> m)
         {
-            var msg = new ServiceBusMessage(BinaryData.FromObjectAsJson(payload))
+            ServiceBusMessage msg = new ServiceBusMessage(BinaryData.FromObjectAsJson(m.Payload))
             {
                 ContentType = "application/json",
-                Subject = subject,
-                CorrelationId = correlationId
+                Subject = m.Subject,
+                CorrelationId = Activity.Current?.TraceId.ToString()
             };
-            if (ttl.HasValue) msg.TimeToLive = ttl.Value;
 
-            // Optional: deterministic id for duplicate detection (Standard/Premium)
-            // msg.MessageId = $"{subject}:{correlationId}:{SomeKey}";
+            if (m.TimeToLive.HasValue) msg.TimeToLive = m.TimeToLive.Value;
 
-            await _sender.SendMessageAsync(msg, ct);
+            if (!string.IsNullOrWhiteSpace(m.PlayerId)) msg.ApplicationProperties["PlayerId"] = m.PlayerId;
+            if (!string.IsNullOrWhiteSpace(m.GuildId)) msg.ApplicationProperties["GuildId"] = m.GuildId;
+
+            return msg;
+        }
+
+        public async Task PublishMessageAsync(ServiceBusMessage message, CancellationToken ct = default)
+        {
+            await _sender.SendMessageAsync(message, ct);
         }
 
         public async Task PublishBatchAsync(IEnumerable<ServiceBusMessage> messages, CancellationToken ct = default)
@@ -42,8 +50,7 @@ namespace ServiceBus_MMO_PostOffice.Services
                         batch.Dispose();
                         batch = await _sender.CreateMessageBatchAsync(ct);
 
-                        if (!batch.TryAddMessage(m))
-                            throw new InvalidOperationException("Single message too large for an empty batch.");
+                        if (!batch.TryAddMessage(m)) throw new InvalidOperationException("Single message too large for an empty batch.");
                     }
                 }
 

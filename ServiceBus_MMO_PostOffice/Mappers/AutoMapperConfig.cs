@@ -9,16 +9,22 @@ namespace ServiceBus_MMO_PostOffice.Mappers
     {
         public AutoMapperConfig()
         {
+            //Player
+            CreateMap<CreatePlayerDTO, Player>();
+            CreateMap<Player, PlayerCreated>();
             CreateMap<Player, PlayerDTO>()
                 .ForMember(d => d.Guild, o => o.MapFrom(s => s.Guild));
-
             CreateMap<PlayerDTO, Player>();
-            CreateMap<CreatePlayerDTO, Player>();
 
+            //Guild
             CreateMap<Guild, GuildDTO>();
             CreateMap<GuildDTO, Guild>();
             CreateMap<CreateGuildDTO, Guild>();
-            CreateMap<Player, PlayerCreated>();
+
+            //Raid
+            CreateMap<Raid, RaidDTO>()
+                .ForMember(d => d.RaidParticipants, o => o.MapFrom(s => s.RaidParticipant));
+            CreateMap<CreateRaidDTO, Raid>();
         }
     }
 }

@@ -4,6 +4,7 @@ using Azure.Messaging.ServiceBus.Administration;
 using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
 using ServiceBus_MMO_PostOffice.Azure.Integration;
+using ServiceBus_MMO_PostOffice.Contracts;
 using ServiceBus_MMO_PostOffice.Data;
 using ServiceBus_MMO_PostOffice.Mappers;
 using ServiceBus_MMO_PostOffice.Services;
@@ -45,7 +46,15 @@ ServiceBusAdministrationClient admin =
     ? new ServiceBusAdministrationClient(cfg["ServiceBus:ConnectionString"])
     : new ServiceBusAdministrationClient(ns, new DefaultAzureCredential());
 
-await ServiceBusBootstrap.EnsureSubscriptionAsync(
+
+
+builder.Services.AddSingleton<PostOfficeServiceBusPublisher>();
+
+var app = builder.Build();
+
+if (app.Environment.IsDevelopment())
+{
+    await ServiceBusBootstrap.EnsureSubscriptionAsync(
     admin,
     topic: cfg["ServiceBus:Topic"],
     subscription: PlayerCreatedSubscription.SubscriptionName,
@@ -56,12 +65,22 @@ await ServiceBusBootstrap.EnsureSubscriptionAsync(
         new CorrelationRuleFilter { Subject = PlayerCreatedSubscription.Subject })
     });
 
-builder.Services.AddSingleton<PostOfficeServiceBusPublisher>();
+    await ServiceBusBootstrap.EnsureSubscriptionAsync(
+    admin,
+    topic: cfg["ServiceBus:Topic"],
+    subscription: RaidEventsSubscription.SubscriptionName,
+    requiresSessions: true,
+    desiredRules: new[]
+    {
+        new CreateRuleOptions(RaidEventsSubscription.InviteRuleName,
+        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidInvite }),
 
-var app = builder.Build();
+        new CreateRuleOptions(RaidEventsSubscription.CancelRuleName,
+        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidCancelled })
+    },
+    autoDeleteOnIdle: TimeSpan.FromDays(31));
 
-if (app.Environment.IsDevelopment())
-{
+
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
     await db.Database.MigrateAsync();

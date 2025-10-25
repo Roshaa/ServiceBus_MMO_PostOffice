@@ -17,7 +17,7 @@ namespace ServiceBus_MMO_PostOffice.Services
             _log = log;
         }
 
-        public ServiceBusMessage CreateMessage<T>(T payload, string subject, string sessionId = null)
+        public ServiceBusMessage CreateMessage<T>(T payload, string subject, TimeSpan? ttl, string sessionId = null)
         {
             var msg = new ServiceBusMessage(BinaryData.FromObjectAsJson(payload))
             {
@@ -26,6 +26,10 @@ namespace ServiceBus_MMO_PostOffice.Services
                 CorrelationId = Activity.Current?.TraceId.ToString(),
                 MessageId = $"{subject}:{Guid.NewGuid():N}"
             };
+
+            if (!string.IsNullOrWhiteSpace(sessionId)) msg.SessionId = sessionId;
+
+            if (ttl.HasValue) msg.TimeToLive = ttl.Value;
 
             var playerId = payload switch { PlayerCreated p => p.Id, _ => 0 };
             if (playerId > 0) msg.ApplicationProperties["playerId"] = playerId;

@@ -48,7 +48,7 @@ namespace ServiceBus_MMO_PostOffice.Controllers
         }
 
         [HttpPost]
-        public async Task<ActionResult<Player>> PostPlayer([FromBody] CreatePlayerDTO createPlayerDTO, CancellationToken ct = default)
+        public async Task<ActionResult> PostPlayer([FromBody] CreatePlayerDTO createPlayerDTO, CancellationToken ct = default)
         {
             Player player = _mapper.Map<Player>(createPlayerDTO);
 
@@ -57,7 +57,7 @@ namespace ServiceBus_MMO_PostOffice.Controllers
 
             PlayerCreated playerCreated = _mapper.Map<PlayerCreated>(player);
 
-            ServiceBusMessage sbMessage = _publisher.CreateMessage(playerCreated, PlayerCreatedSubscription.Subject);
+            ServiceBusMessage sbMessage = _publisher.CreateMessage(playerCreated, PlayerCreatedSubscription.Subject, null, player.Id.ToString());
 
             await _publisher.PublishMessageAsync(sbMessage);
 

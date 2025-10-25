@@ -5,6 +5,8 @@
         public int Id { get; set; }
         public string NickName { get; set; } = string.Empty;
         public int? GuildId { get; set; }
+
         public Guild? Guild { get; set; }
+        public ICollection<RaidParticipant> Raids { get; set; } = [];
     }
 }

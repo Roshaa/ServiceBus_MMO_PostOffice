@@ -9,6 +9,8 @@ namespace ServiceBus_MMO_PostOffice.Data
 
         public DbSet<Guild> Guild { get; set; }
         public DbSet<Player> Player { get; set; }
+        public DbSet<Raid> Raid { get; set; }
+        public DbSet<RaidParticipant> RaidParticipant { get; set; }
 
     }
 }

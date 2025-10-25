@@ -29,7 +29,11 @@ namespace ServiceBus_MMO_PostOffice.Services
 
             if (!string.IsNullOrWhiteSpace(sessionId)) msg.SessionId = sessionId;
 
-            if (ttl.HasValue) msg.TimeToLive = ttl.Value;
+            if (ttl.HasValue)
+            {
+                if (ttl < TimeSpan.Zero) ttl = TimeSpan.FromMinutes(3); //This is for testing a deadletter queue i made.
+                msg.TimeToLive = ttl.Value;
+            }
 
             var playerId = payload switch { PlayerCreated p => p.Id, _ => 0 };
             if (playerId > 0) msg.ApplicationProperties["playerId"] = playerId;

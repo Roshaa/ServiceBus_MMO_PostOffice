@@ -45,9 +45,8 @@ ServiceBusAdministrationClient admin =
     ? new ServiceBusAdministrationClient(cfg["ServiceBus:ConnectionString"])
     : new ServiceBusAdministrationClient(ns, new DefaultAzureCredential());
 
-
-
 builder.Services.AddSingleton<PostOfficeServiceBusPublisher>();
+builder.Services.AddHostedService<ReminderSchedulerService>();
 
 var app = builder.Build();
 
@@ -76,7 +75,9 @@ if (app.Environment.IsDevelopment())
         new CreateRuleOptions(RaidEventsSubscription.InviteRuleName,
         new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidInviteSubject }),
         new CreateRuleOptions(RaidEventsSubscription.CancelRuleName,
-        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidCancelledSubject })
+        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidCancelledSubject }),
+        new CreateRuleOptions(RaidEventsSubscription.ReminderRuleName,
+        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidReminderSubject })
     },
     autoDeleteOnIdle: TimeSpan.FromDays(31));
 

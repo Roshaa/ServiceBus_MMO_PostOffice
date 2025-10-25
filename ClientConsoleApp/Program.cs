@@ -12,6 +12,9 @@ using SharedClasses.Messaging;
 /// I will not be saving data to a database here
 /// This is just a client app that will receive the messages accordingly
 /// The goal of this project is Service Bus with topics and subscriptions
+///
+/// Duplicate detection is not enabled on the topic in this demo.
+/// It also looks easy to implement if needed.
 /// 
 /////////////////////
 
@@ -87,6 +90,18 @@ RaidEventsProcessor.ProcessMessageAsync += async args =>
         case RaidEventsSubscription.RaidInviteSubject:
             {
                 RaidEvent ev = args.Message.Body.ToObjectFromJson<RaidEvent>();
+
+                //Lets simulate a dead letter if a player logged in after the raid started
+                if (DateTime.UtcNow > ev.EndTime)
+                {
+                    await args.DeadLetterMessageAsync(args.Message,
+                    deadLetterReason: "RaidHasAlreadyEnded",
+                    deadLetterErrorDescription: $"CurrentTime: {DateTime.UtcNow}, EndTime: {ev.EndTime}");
+
+                    Console.WriteLine($"Dead lettered raid invite {ev.Id} because the raid has already ended.");
+                    return;
+                }
+
                 Console.WriteLine($"{ev.Message}");
                 Console.WriteLine($"Raid Details: StartTime={ev.StartTime:u}, EndTime={ev.EndTime:u}");
 
@@ -109,6 +124,24 @@ RaidEventsProcessor.ProcessMessageAsync += async args =>
                 }
                 break;
             }
+        case RaidEventsSubscription.RaidReminderSubject:
+            {
+                RaidReminder ev = args.Message.Body.ToObjectFromJson<RaidReminder>();
+
+                //Lets simulate a dead letter if a player logged in after the raid started
+                if (DateTime.UtcNow > ev.StartTime)
+                {
+                    await args.DeadLetterMessageAsync(args.Message,
+                    deadLetterReason: "RaidHasAlreadyEnded",
+                    deadLetterErrorDescription: $"CurrentTime: {DateTime.UtcNow}, StartTime: {ev.StartTime}");
+
+                    Console.WriteLine($"Dead lettered raid invite {ev.RaidId} because the raid has already ended.");
+                    return;
+                }
+
+                Console.WriteLine($"Your raid with Id={ev.RaidId} beginning at {ev.StartTime:u} is starting soon! Reminder Message: {ev.Message}");
+                break;
+            }
         default:
             await args.DeadLetterMessageAsync(args.Message, "UnknownSubject", subject);
             return;
@@ -128,11 +161,60 @@ RaidEventsProcessor.ProcessErrorAsync += args =>
 
 
 
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#region RaidEvents DLQ
+
+ServiceBusProcessor RaidEventsDlqProcessor = client.CreateProcessor(
+    topic,
+    raidEventsSub,
+    new ServiceBusProcessorOptions
+    {
+        SubQueue = SubQueue.DeadLetter,
+        AutoCompleteMessages = false,
+        MaxConcurrentCalls = 1,
+        PrefetchCount = 10,
+        MaxAutoLockRenewalDuration = TimeSpan.FromMinutes(5)
+    });
+
+RaidEventsDlqProcessor.ProcessMessageAsync += async args =>
+{
+    var messageArgs = args.Message;
+
+    Console.WriteLine($"[DLQ] SessionId={messageArgs.SessionId} | Subject={messageArgs.Subject} | CorrelationId={messageArgs.CorrelationId}");
+    Console.WriteLine($"[DLQ] Reason={messageArgs.DeadLetterReason} | Description={messageArgs.DeadLetterErrorDescription}");
+
+    try
+    {
+        var ev = messageArgs.Body.ToObjectFromJson<RaidEvent>();
+        Console.WriteLine($"[DLQ] RaidId={ev.Id} | Start={ev.StartTime:u} | End={ev.EndTime:u} | Msg={ev.Message}");
+    }
+    catch
+    {
+        throw;
+    }
+
+    await args.CompleteMessageAsync(messageArgs); // remove from DLQ after inspection
+};
+
+RaidEventsDlqProcessor.ProcessErrorAsync += args =>
+{
+    Console.WriteLine($"[DLQ][ERR] {args.Exception}");
+    return Task.CompletedTask;
+};
+
+#endregion
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
 await PlayerWelcomeProcessor.StartProcessingAsync();
 Console.WriteLine($"Listening on {topic}/{playerCreatedSub} session={HARDCODED_PLAYER_ID} in {sbNamespace}. Press Ctrl+C to exit.");
 
 await RaidEventsProcessor.StartProcessingAsync();
 Console.WriteLine($"Listening on {topic}/{raidEventsSub} session={HARDCODED_PLAYER_ID} in {sbNamespace}. Press Ctrl+C to exit.");
+
+await RaidEventsDlqProcessor.StartProcessingAsync();
+Console.WriteLine($"Listening DLQ on {topic}/{raidEventsSub} in {sbNamespace}.");
 
 Console.WriteLine("Press 'R' to list pending raids.");
 Console.WriteLine("-----------------------------------------------------------------------------------------------");
@@ -142,9 +224,11 @@ Console.CancelKeyPress += async (_, e) =>
 {
     e.Cancel = true;
     await PlayerWelcomeProcessor.StopProcessingAsync();
-    await RaidEventsProcessor.StopProcessingAsync();
     await PlayerWelcomeProcessor.DisposeAsync();
+    await RaidEventsProcessor.StopProcessingAsync();
     await RaidEventsProcessor.DisposeAsync();
+    await RaidEventsDlqProcessor.StopProcessingAsync();
+    await RaidEventsDlqProcessor.DisposeAsync();
     await client.DisposeAsync();
     tcs.TrySetResult();
 };

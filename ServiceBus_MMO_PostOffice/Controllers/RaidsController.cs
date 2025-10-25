@@ -48,12 +48,19 @@ namespace ServiceBus_MMO_PostOffice.Controllers
             _context.Raid.Add(raid);
             await _context.SaveChangesAsync();
 
+            string guildName = await _context.Guild
+                .Where(g => g.Id == raid.GuildId)
+                .Select(g => g.Name)
+                .SingleAsync();
+
             int[] guildMembersId = GetGuildMembersById(raid.GuildId);
 
+
+            //Generate raid invites and send them via Service Bus
             List<ServiceBusMessage> messages = new List<ServiceBusMessage>();
 
             RaidEvent invite = _mapper.Map<RaidEvent>(raid);
-            invite.Message = $"You are invited to a raid for guild {raid.Guild.Name}";
+            invite.Message = $"You are invited to a raid for guild {guildName}";
 
             TimeSpan ttl = raid.StartTime.AddMinutes(30) - DateTime.UtcNow;
 
@@ -67,11 +74,25 @@ namespace ServiceBus_MMO_PostOffice.Controllers
 
                 _context.RaidParticipant.Add(participant);
 
+                var raidTimeMinusOneHour = raid.StartTime - TimeSpan.FromHours(1);
+
+                ScheduledMessage scheduledMessage = new ScheduledMessage
+                {
+                    RaidId = raid.Id,
+                    PlayerId = memberId,
+                    Subject = RaidEventsSubscription.RaidInviteSubject,
+                    SessionId = memberId.ToString(),
+                    ScheduledAtUtc = raidTimeMinusOneHour
+                };
+
+                _context.ScheduledMessage.Add(scheduledMessage);
+
                 messages.Add(_publisher.CreateMessage<RaidEvent>(invite, RaidEventsSubscription.RaidInviteSubject, ttl, participant.PlayerId.ToString()));
             }
 
             await _context.SaveChangesAsync();
             await _publisher.PublishBatchAsync(messages);
+            //
 
             var raidDto = await _context.Raid
             .Where(r => r.Id == raid.Id)

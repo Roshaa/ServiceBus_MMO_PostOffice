@@ -11,6 +11,7 @@ namespace ServiceBus_MMO_PostOffice.Data
         public DbSet<Player> Player { get; set; }
         public DbSet<Raid> Raid { get; set; }
         public DbSet<RaidParticipant> RaidParticipant { get; set; }
+        public DbSet<ScheduledMessage> ScheduledMessage { get; set; }
 
     }
 }

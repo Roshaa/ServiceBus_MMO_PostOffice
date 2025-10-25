@@ -1,7 +1,7 @@
 ﻿using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
 
-namespace ServiceBus_MMO_PostOffice.Azure.Integration
+namespace ServiceBus_MMO_PostOffice.Bootstrap
 {
     public static class ServiceBusBootstrap
     {

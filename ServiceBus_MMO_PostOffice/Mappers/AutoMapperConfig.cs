@@ -2,6 +2,7 @@
 using ServiceBus_MMO_PostOffice.DTO_s;
 using ServiceBus_MMO_PostOffice.Messages.MessageTypes;
 using ServiceBus_MMO_PostOffice.Models;
+using SharedClasses.Messaging;
 
 namespace ServiceBus_MMO_PostOffice.Mappers
 {
@@ -22,9 +23,12 @@ namespace ServiceBus_MMO_PostOffice.Mappers
             CreateMap<CreateGuildDTO, Guild>();
 
             //Raid
+            CreateMap<RaidParticipant, RaidParticipantsDTO>()
+                .ForMember(d => d.NickName, o => o.MapFrom(s => s.Player.NickName));
             CreateMap<Raid, RaidDTO>()
                 .ForMember(d => d.RaidParticipants, o => o.MapFrom(s => s.RaidParticipant));
             CreateMap<CreateRaidDTO, Raid>();
+            CreateMap<Raid, RaidEvent>();
         }
     }
 }

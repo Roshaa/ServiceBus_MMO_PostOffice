@@ -3,8 +3,7 @@ using Azure.Messaging.ServiceBus;
 using Azure.Messaging.ServiceBus.Administration;
 using DotNetEnv;
 using Microsoft.EntityFrameworkCore;
-using ServiceBus_MMO_PostOffice.Azure.Integration;
-using ServiceBus_MMO_PostOffice.Contracts;
+using ServiceBus_MMO_PostOffice.Bootstrap;
 using ServiceBus_MMO_PostOffice.Data;
 using ServiceBus_MMO_PostOffice.Mappers;
 using ServiceBus_MMO_PostOffice.Services;
@@ -54,11 +53,13 @@ var app = builder.Build();
 
 if (app.Environment.IsDevelopment())
 {
+    //I Dont know IaC yet :)
+
     await ServiceBusBootstrap.EnsureSubscriptionAsync(
     admin,
     topic: cfg["ServiceBus:Topic"],
     subscription: PlayerCreatedSubscription.SubscriptionName,
-    requiresSessions: false,
+    requiresSessions: true,
     desiredRules: new List<CreateRuleOptions>
     {
         new CreateRuleOptions(PlayerCreatedSubscription.RuleName,
@@ -73,10 +74,9 @@ if (app.Environment.IsDevelopment())
     desiredRules: new[]
     {
         new CreateRuleOptions(RaidEventsSubscription.InviteRuleName,
-        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidInvite }),
-
+        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidInviteSubject }),
         new CreateRuleOptions(RaidEventsSubscription.CancelRuleName,
-        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidCancelled })
+        new CorrelationRuleFilter { Subject = RaidEventsSubscription.RaidCancelledSubject })
     },
     autoDeleteOnIdle: TimeSpan.FromDays(31));
 

@@ -34,9 +34,6 @@ namespace ServiceBus_MMO_PostOffice.Services
             var playerId = payload switch { PlayerCreated p => p.Id, _ => 0 };
             if (playerId > 0) msg.ApplicationProperties["playerId"] = playerId;
 
-            //var guildId = payload switch { GuildCreated g => g.Id, _ => 0 };
-            //if (guildId > 0) msg.ApplicationProperties["guildId"] = guildId;
-
             return msg;
         }
 

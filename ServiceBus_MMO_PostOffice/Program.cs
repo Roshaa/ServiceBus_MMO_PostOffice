@@ -81,6 +81,17 @@ if (app.Environment.IsDevelopment())
     },
     autoDeleteOnIdle: TimeSpan.FromDays(31));
 
+    await ServiceBusBootstrap.EnsureSubscriptionAsync(
+    admin,
+    topic: cfg["ServiceBus:Topic"],
+    subscription: MaintenanceSubscription.SubscriptionName,
+    requiresSessions: false,
+    desiredRules: new[]
+    {
+        new CreateRuleOptions(MaintenanceSubscription.RuleName,
+            new CorrelationRuleFilter { Subject = MaintenanceSubscription.Subject })
+    });
+
 
     using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();

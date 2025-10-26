@@ -72,6 +72,14 @@ namespace ServiceBus_MMO_PostOffice.Services
             }
         }
 
+        public Task<IReadOnlyList<long>> ScheduleBatchAsync(IEnumerable<ServiceBusMessage> messages,
+                                                    DateTimeOffset enqueueAt,
+                                                    CancellationToken ct = default)
+            => _sender.ScheduleMessagesAsync(messages, enqueueAt, ct);
+
+        public Task CancelScheduledAsync(IEnumerable<long> sequenceNumbers, CancellationToken ct = default)
+            => _sender.CancelScheduledMessagesAsync(sequenceNumbers, ct);
+
         public async ValueTask DisposeAsync() => await _sender.DisposeAsync();
 
     }

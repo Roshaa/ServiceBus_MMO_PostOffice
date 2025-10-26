@@ -141,6 +141,7 @@ RaidEventsProcessor.ProcessMessageAsync += async args =>
 
                 Console.WriteLine($"Your raid with Id={ev.RaidId} beginning at {ev.StartTime:u} is starting soon! Reminder Message: {ev.Message}");
                 break;
+
             }
         default:
             await args.DeadLetterMessageAsync(args.Message, "UnknownSubject", subject);
@@ -158,6 +159,46 @@ RaidEventsProcessor.ProcessErrorAsync += args =>
 
 #endregion
 ///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+
+
+
+///////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////////
+#region Maintenance (peek-only)
+//since the message is the same for all players we can use a non-destructive reader to peek at the messages without locking or removing them from the subscription
+//This is useful for global announcements that all players should see
+
+string maintenanceSub = MaintenanceSubscription.SubscriptionName;
+
+ServiceBusReceiver MaintenancePeek = client.CreateReceiver(topic, maintenanceSub);
+
+long lastSeq = 0;
+
+var maintenancePeekTask = Task.Run(async () =>
+{
+    while (true)
+    {
+        var batch = await MaintenancePeek.PeekMessagesAsync(
+            maxMessages: 50,
+            fromSequenceNumber: lastSeq == 0 ? (long?)null : lastSeq + 1);
+
+        if (batch.Count == 0)
+        {
+            await Task.Delay(2000);
+            continue;
+        }
+
+        foreach (var m in batch)
+        {
+            var notice = m.Body.ToObjectFromJson<ScheduledMaintenance>();
+            Console.WriteLine($"[MAINT-PEEK] {notice.Message} Starts: {notice.MaintenanceStartTime:u} (seq={m.SequenceNumber})");
+            lastSeq = m.SequenceNumber;
+        }
+    }
+});
+
+#endregion
+////////////////////////////////////////////////////////////////////////////////////////////////
+
 
 
 
@@ -188,12 +229,12 @@ RaidEventsDlqProcessor.ProcessMessageAsync += async args =>
         var ev = messageArgs.Body.ToObjectFromJson<RaidEvent>();
         Console.WriteLine($"[DLQ] RaidId={ev.Id} | Start={ev.StartTime:u} | End={ev.EndTime:u} | Msg={ev.Message}");
     }
-    catch
+    catch (Exception ex)
     {
-        throw;
+        Console.WriteLine($"[DLQ] parse failed: {ex.Message}");
     }
 
-    await args.CompleteMessageAsync(messageArgs); // remove from DLQ after inspection
+    await args.CompleteMessageAsync(messageArgs);
 };
 
 RaidEventsDlqProcessor.ProcessErrorAsync += args =>
@@ -215,6 +256,7 @@ Console.WriteLine($"Listening on {topic}/{raidEventsSub} session={HARDCODED_PLAY
 
 await RaidEventsDlqProcessor.StartProcessingAsync();
 Console.WriteLine($"Listening DLQ on {topic}/{raidEventsSub} in {sbNamespace}.");
+
 
 Console.WriteLine("Press 'R' to list pending raids.");
 Console.WriteLine("-----------------------------------------------------------------------------------------------");

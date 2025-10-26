@@ -39,42 +39,80 @@ namespace ServiceBus_MMO_PostOffice.Services
             using var scope = _scopeFactory.CreateScope();
             var db = scope.ServiceProvider.GetRequiredService<ApplicationDbContext>();
 
-            var currentTimeMinusOneHour = DateTime.UtcNow - TimeSpan.FromHours(1);
+            ScheduledMessage[] scheduledMessages = await GetScheduledMessages(db, ct);
+
+            while (scheduledMessages.Length > 0)
+            {
+                List<ServiceBusMessage> messagesToPublish = new List<ServiceBusMessage>();
+
+                int[] raidIds = scheduledMessages
+                    .Select(sm => sm.RaidId)
+                    .Distinct()
+                    .ToArray();
+
+                var raidStartTimes = await db.Raid
+                        .AsNoTracking()
+                        .Where(r => raidIds.Contains(r.Id))
+                        .Select(r => new { r.Id, r.StartTime })
+                        .ToDictionaryAsync(x => x.Id, x => x.StartTime, ct);
+
+                foreach (ScheduledMessage message in scheduledMessages)
+                {
+                    DateTime raidStartTime = raidStartTimes.FirstOrDefault(rt => rt.Key == message.RaidId).Value;
+
+                    if (raidStartTime == default)
+                    {
+                        _log.LogWarning("ScheduledMessage {ScheduledMessageId} references non-existent Raid {RaidId}", message.Id, message.RaidId);
+                        db.ScheduledMessage.Remove(message);
+                        continue;
+                    }
+
+                    var ttl = raidStartTime - DateTime.UtcNow;
+                    if (ttl <= TimeSpan.Zero)
+                    {
+                        _log.LogWarning("ScheduledMessage {ScheduledMessageId} for Raid {RaidId} has non-positive TTL {TTL}", message.Id, message.RaidId, ttl);
+                        db.ScheduledMessage.Remove(message);
+                        continue;
+                    }
+
+                    RaidReminder raidReminder = new RaidReminder
+                    {
+                        RaidId = message.RaidId,
+                        StartTime = raidStartTime,
+                        Message = $"Reminder: Your raid {message.RaidId} is scheduled at {raidStartTime:u} UTC."
+                    };
+
+                    messagesToPublish.Add(_publisher.CreateMessage<RaidReminder>(
+                        raidReminder,
+                        RaidEventsSubscription.RaidReminderSubject,
+                        ttl: ttl,
+                        sessionId: message.PlayerId.ToString()
+                    ));
+
+                    db.ScheduledMessage.Remove(message);
+                }
+
+                if (messagesToPublish.Count > 0)
+                    await _publisher.PublishBatchAsync(messagesToPublish);
+
+                await db.SaveChangesAsync(ct);
+
+                scheduledMessages = await GetScheduledMessages(db, ct);
+            }
+        }
+
+        private async Task<ScheduledMessage[]> GetScheduledMessages(ApplicationDbContext db, CancellationToken ct)
+        {
+            DateTime currentTimeMinusOneHour = DateTime.UtcNow - TimeSpan.FromHours(1);
+            int pageSize = 500;
 
             ScheduledMessage[] scheduledMessages = await db.ScheduledMessage
                 .Where(sm => sm.ScheduledAtUtc <= currentTimeMinusOneHour)
+                .OrderBy(sm => sm.ScheduledAtUtc)
+                .Take(pageSize)
                 .ToArrayAsync(ct);
 
-            List<ServiceBusMessage> messagesToPublish = new List<ServiceBusMessage>();
-
-            foreach (ScheduledMessage message in scheduledMessages)
-            {
-                Raid raid = await db.Raid.FindAsync(message.RaidId);
-                if (raid is null)
-                {
-                    _log.LogWarning("ScheduledMessage {ScheduledMessageId} references non-existing Raid {RaidId}", message.Id, message.RaidId);
-                    continue;
-                }
-
-                RaidReminder raidReminder = new RaidReminder
-                {
-                    RaidId = message.RaidId,
-                    StartTime = raid.StartTime,
-                    Message = $"Reminder: Your raid {message.RaidId} is scheduled at {message.ScheduledAtUtc:u} UTC."
-                };
-
-                messagesToPublish.Add(_publisher.CreateMessage<RaidReminder>(
-                    raidReminder,
-                    RaidEventsSubscription.RaidReminderSubject,
-                    ttl: raid.StartTime - DateTime.UtcNow,
-                    sessionId: message.PlayerId.ToString()
-                ));
-
-                db.ScheduledMessage.Remove(message);
-            }
-
-            await _publisher.PublishBatchAsync(messagesToPublish);
-            await db.SaveChangesAsync(ct);
+            return scheduledMessages;
         }
     }
 }

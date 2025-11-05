@@ -1,23 +1,58 @@
-Azure Service Bus Messaging Demo — “MMO Post Office”
+# 📨 Azure Service Bus Messaging Demo — *“MMO Post Office”*
 
-.NET 8, Azure Service Bus (Topics/Subscriptions/Sessions), EF Core, AutoMapper, DefaultAzureCredential
+**Tech Stack:** .NET 8 · Azure Service Bus (Topics/Subscriptions/Sessions) · EF Core · AutoMapper · DefaultAzureCredential
 
-Built a topic-based event architecture with CorrelationRuleFilter(Subject) and code-first subscription/rule bootstrap. Removed the default rule to guarantee only intended events flow.
+A lightweight **event-driven** demo simulating an MMO’s post office. It showcases **topic pub/sub**, **session affinity**, **correlation filters**, **DLQ recovery**, **broker vs. app scheduling**, **batching**, **prefetch**, **auto lock renewal**, and **idempotency/tracing**.
 
-Implemented per-user fan-out with sessions (SessionId = playerId). Wrote session processors with prefetch, max concurrent calls/sessions, and auto lock renewal; routed by Subject & app properties; published with message batching for throughput.
+---
 
-Made consumers robust and self-healing: applied TTL, dead-lettering (unknown subject / stale invite) with a DLQ processor that inspects reason/description and either quarantines or replays messages marked as transient failures.
+## Highlights
 
-Demonstrated scheduling two ways:
+- **Topic pub/sub + correlation filters**
+  - Code-first bootstrap for topics, subscriptions, and rules.
+  - **Default rule removed** → only intended events flow.
+  - `CorrelationRuleFilter(Subject)` + App Properties for routing.
 
-Broker scheduling (ScheduleMessagesAsync/CancelScheduledMessagesAsync) for broadcast maintenance notices.
+- **Per-player affinity with sessions**
+  - `SessionId = playerId` → ordered, isolated streams per user.
+  - Session processors tuned with **prefetch**, **max concurrent calls/sessions**, **auto lock renewal**.
 
-Application-level scheduling via an hourly BackgroundService that emits per-player raid reminders (1h prior) from a simple DB table—illustrating trade-offs between broker durability and app-level control.
+- **Throughput & robustness**
+  - **Message batching** for publish.
+  - **TTL** + **dead-lettering** for stale/invalid messages.
+  - **DLQ processor** inspects reason/description → **quarantine** or **replay** transient failures.
 
-Designed for idempotency & tracing: consistent MessageId, CorrelationId (Activity trace), and ApplicationProperties["playerId"]; topic-level duplicate detection is off in the demo but the pipeline is ready for it.
+- **Two scheduling models**
+  - **Broker:** `ScheduleMessagesAsync` / `CancelScheduledMessagesAsync` for broadcast maintenance.
+  - **App:** hourly `BackgroundService` emits per-player raid reminders (T-1h) from a DB table.
+  - Trade-offs: **broker durability** vs **app-level control**.
 
-Clean developer experience: Swagger for the API, DefaultAzureCredential with connection-string fallback, lean EF models/DTOs via AutoMapper.
+- **Idempotency & tracing**
+  - Consistent `MessageId`, `CorrelationId` (Activity), and `ApplicationProperties["playerId"]`.
+  - Topic duplicate detection off (demo), pipeline ready to enable.
 
-What this shows quickly: sessions (ordering + affinity), batching, TTL, DLQ handling, correlation filters, broker vs. app scheduling, and practical consumer options (peek-only for broadcast).
+- **DX**
+  - Swagger for the API, clean EF models/DTOs with AutoMapper.
+  - `DefaultAzureCredential` with connection-string fallback.
 
-Keywords: Azure Service Bus, Topics/Subscriptions, Sessions, Correlation filters, DLQ, TTL, Scheduled messages, Batching, Prefetch, Lock renewal, Idempotency, DefaultAzureCredential, .NET 8.
+---
+
+## Quick Start
+
+### Prereqs
+- .NET 8 SDK
+- Azure subscription + Service Bus namespace (with a Topic)
+- SQL Server (local or Azure SQL) for the demo DB
+
+### Configure
+Create `appsettings.Development.json` or set env vars:
+
+```json
+{
+  "ConnectionStrings": {
+    "ServiceBus": "<SERVICE BUS CONNECTION STRING> (optional when MSI used)",
+    "Sql": "Server=.;Database=MmoPost;Trusted_Connection=True;TrustServerCertificate=True"
+  },
+  "ServiceBus": {
+    "FullyQualifiedNamespace": "your-namespace.servicebus.windows.net",
+    "To

@@ -21,5 +21,3 @@ Clean developer experience: Swagger for the API, DefaultAzureCredential with con
 What this shows quickly: sessions (ordering + affinity), batching, TTL, DLQ handling, correlation filters, broker vs. app scheduling, and practical consumer options (peek-only for broadcast).
 
 Keywords: Azure Service Bus, Topics/Subscriptions, Sessions, Correlation filters, DLQ, TTL, Scheduled messages, Batching, Prefetch, Lock renewal, Idempotency, DefaultAzureCredential, .NET 8.
-
-If productionizing next: add IaC (Bicep/Terraform), enable topic duplicate detection with an appropriate window, outbox pattern on publishers, structured logging + Azure Monitor dashboards, quarantine queue + replay tooling, contract versioning, and SLA-driven retry policies.
